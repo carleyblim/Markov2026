@@ -1,0 +1,50 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import time
+
+
+# number of accepted samples
+N = 10_000
+
+def rejection_sampling(N, lam):
+  c = 1 / (lam * (1 - lam) * np.e)
+  accepted = []
+  proposals = 0
+  start_time = time.time()
+  while len(accepted) < N:
+    U1 = np.random.uniform(0, 1)
+    X = -np.log(U1) / lam
+    U2 = np.random.uniform(0, 1)
+    acceptance_prob = (
+      X * np.exp(-X)
+      / (c * lam * np.exp(-lam * X))
+    )
+    proposals += 1
+    if U2 < acceptance_prob:
+      accepted.append(X)
+    end_time = time.time()
+    accepted = np.array(accepted)
+    acceptance_frac = N / proposals
+    time_per_sample = (end_time - start_time) / N
+    return accepted, c, acceptance_frac, time_per_sample
+
+samples_5, c_5, acc_5, time_5 = rejection_sampling(N, 0.5)
+samples_2, c_2, acc_2, time_2 = rejection_sampling(N, 0.2)
+
+# print the results
+print("lambda = 0.5")
+print("c =", c_5)
+print("Theoretical acceptance rate =", 1 / c_5)
+print("Acceptance rate =", acc_5)
+print("Mean time per accepted sample =", time_5, "seconds")
+
+print()
+
+print("lambda = 0.2")
+print("c =", c_2)
+print("Theoretical acceptance rate =", 1 / c_2)
+print("Acceptance rate =", acc_2)
+print("Mean time per accepted sample =", time_2, "seconds")
+
+
+# plot histograms
