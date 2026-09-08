@@ -68,7 +68,7 @@ plt.hist(
     label="lambda = 0.2"
 )
 
-# Overlay target density
+# density
 plt.plot(
     x,
     f,
