@@ -48,3 +48,36 @@ print("Mean time per accepted sample =", time_2, "seconds")
 
 
 # plot histograms
+
+x = np.linspace(0, 12, 1000)
+f = x * np.exp(-x)
+
+plt.hist(
+    samples_5,
+    bins=50,
+    density=True,
+    alpha=0.5,
+    label="lambda = 0.5"
+)
+
+plt.hist(
+    samples_2,
+    bins=50,
+    density=True,
+    alpha=0.5,
+    label="lambda = 0.2"
+)
+
+# Overlay target density
+plt.plot(
+    x,
+    f,
+    linewidth=2,
+    label="f(x) = x exp(-x)"
+)
+
+plt.xlabel("x")
+plt.ylabel("Density")
+plt.title("Acceptance-Rejection Sampling")
+plt.legend()
+plt.show()
