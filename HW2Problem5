@@ -1,0 +1,67 @@
+import numpy as np
+
+np.random.seed(1)
+
+N = 10**5
+
+U = np.random.uniform(0, 1, N)
+
+Z = 1 - np.sqrt(1 - U)
+
+print("Sample mean:", np.mean(Z))
+print("Theoretical mean:", 1/3)
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+np.random.seed(1)
+
+# Parameters
+N_max = 10**4
+R = 10**3
+
+# Initial condition C(3) = 1
+C = np.ones(R, dtype=int)
+
+# Grow from N = 3 to N = 10^4
+for n in range(3, N_max):
+
+    # Probability of adding a core node
+    p = C / n
+
+    # One Bernoulli draw for each realization
+    add = np.random.binomial(1, p, R)
+
+    # Update all R realizations
+    C = C + add
+
+# Compute z = C/N
+z = C / N_max
+
+# Empirical statistics
+sample_mean = np.mean(z)
+sample_sd = np.std(z)
+sample_ratio = sample_sd / sample_mean
+
+print("Empirical mean:", sample_mean)
+print("Theoretical mean:", 1/3)
+
+print("Empirical SD/mean:", sample_ratio)
+print("Theoretical SD/mean:", 1/np.sqrt(2))
+
+print("Smallest core:", np.min(C))
+print("Largest core:", np.max(C))
+
+# Histogram
+plt.hist(z, bins=30, density=True)
+
+# Theoretical density
+z_values = np.linspace(0, 1, 1000)
+h = 2 * (1 - z_values)
+
+plt.plot(z_values, h)
+
+plt.xlabel("z = C/N")
+plt.ylabel("Density")
+plt.title("Core Fraction at N = 10^4")
+plt.show()
