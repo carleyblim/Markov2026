@@ -2,3 +2,51 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
+np.random.seed(1)
+
+a = 0.9
+lambda_f = 1000
+lambda_s = 10
+
+N = 10**5
+
+B = np.random.binomial(1, a, N)
+
+U = np.random.uniform(0, 1, N)
+
+# generate samples
+T = np.where(
+    B == 1,
+    -np.log(U) / lambda_f,
+    -np.log(U) / lambda_s
+)
+
+# Empirical mean
+print("Empirical mean:", np.mean(T))
+
+# Empirical P(T > 50 ms)
+p_empirical = np.mean(T > 0.050)
+print("Empirical P(T > 50 ms):", p_empirical)
+
+# Theoretical probability
+p_theory = a * np.exp(-lambda_f * 0.050) + \
+           (1 - a) * np.exp(-lambda_s * 0.050)
+
+print("Theoretical P(T > 50 ms):", p_theory)
+
+# Histogram
+plt.hist(T, bins=100, density=True)
+
+# Overlay theoretical density
+t = np.linspace(0, 0.5, 1000)
+
+f = a * lambda_f * np.exp(-lambda_f * t) + \
+    (1 - a) * lambda_s * np.exp(-lambda_s * t)
+
+plt.plot(t, f)
+
+plt.yscale("log")
+plt.xlabel("Dwell time (seconds)")
+plt.ylabel("Density")
+plt.title("Mixture of Exponential Dwell Times")
+plt.show()
