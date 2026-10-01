@@ -1,0 +1,152 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# States
+states = ["U", "I", "M", "F", "A"]
+
+# Transition matrix
+# Rows = current state, columns = next state
+P = np.array([
+    [0,   1/2, 1/2, 0,   0],    # U
+    [1/4, 0,   0,   1/2, 1/4],  # I
+    [3/4, 0,   0,   0,   1/4],  # M
+    [0,   0,   0,   1,   0],    # F
+    [0,   0,   0,   0,   1]     # A
+])
+
+# Number of simulations
+N = 10_000
+
+# Set random seed so your results are reproducible
+np.random.seed(100)
+
+
+def simulate(start_state, N=10000):
+    """
+    Simulate N chains starting from start_state.
+    Returns absorption times and final fates.
+    """
+    
+    start = states.index(start_state)
+    
+    times = []
+    fates = []
+    
+    for _ in range(N):
+        current = start
+        t = 0
+        
+        while current not in [3, 4]:
+            
+            # Generate the next state using inverse transform sampling
+            u = np.random.rand()
+            cumulative = np.cumsum(P[current])
+            current = np.searchsorted(cumulative, u)
+            
+            t += 1
+        
+        times.append(t)
+        fates.append(states[current])
+    
+    return np.array(times), np.array(fates)
+
+results = {}
+
+for start in ["U", "I", "M"]:
+    
+    times, fates = simulate(start, N)
+    
+    h_hat = np.mean(fates == "F")
+    
+
+    g_hat = np.mean(times)
+
+    tau_F_hat = np.mean(times[fates == "F"])
+    
+    tau_A_hat = np.mean(times[fates == "A"])
+    
+    results[start] = [h_hat, g_hat, tau_F_hat, tau_A_hat]
+
+print("Simulation Results")
+print("-" * 70)
+print(f"{'Start':<10}{'h_hat':<12}{'g_hat':<12}"
+      f"{'tau_F_hat':<15}{'tau_A_hat':<15}")
+
+for start in ["U", "I", "M"]:
+    h, g, tauF, tauA = results[start]
+    print(f"{start:<10}{h:<12.4f}{g:<12.4f}"
+          f"{tauF:<15.4f}{tauA:<15.4f}")
+
+
+# histogram
+times_I, fates_I = simulate("I", N)
+
+fold_times = times_I[fates_I == "F"]
+aggregate_times = times_I[fates_I == "A"]
+
+plt.figure(figsize=(10, 6))
+
+bins = np.arange(0.5, max(times_I) + 1.5, 1)
+
+plt.hist(
+    fold_times,
+    bins=bins,
+    density=True,
+    alpha=0.5,
+    label="Folded simulations"
+)
+
+plt.hist(
+    aggregate_times,
+    bins=bins,
+    density=True,
+    alpha=0.5,
+    label="Aggregated simulations"
+)
+
+h_I = 5/8
+hA_I = 3/8
+
+Q = P[:3, :3]
+R = P[:3, 3:5]
+
+n_values = np.arange(1, max(times_I) + 1)
+
+pmf_F = []
+pmf_A = []
+
+for n in n_values:
+    
+    matrix = np.linalg.matrix_power(Q, n - 1) @ R
+    
+    prob_F = matrix[1, 0] / h_I
+    prob_A = matrix[1, 1] / hA_I
+    
+    pmf_F.append(prob_F)
+    pmf_A.append(prob_A)
+
+
+# plot exact PMFs
+plt.plot(
+    n_values,
+    pmf_F,
+    marker="o",
+    linestyle="None",
+    label="Exact folded PMF"
+)
+
+plt.plot(
+    n_values,
+    pmf_A,
+    marker="o",
+    linestyle="None",
+    label="Exact aggregated PMF"
+)
+
+plt.xlabel("Absorption time T")
+plt.ylabel("Probability")
+plt.title("Distribution of T Starting from I")
+plt.legend()
+plt.grid(alpha=0.3)
+
+plt.show()
