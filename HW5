@@ -1,0 +1,138 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+P = np.array([
+    [0, 1, 0, 0, 0],
+    [1/4, 0, 3/4, 0, 0],
+    [0, 1/2, 0, 1/2, 0],
+    [0, 0, 3/4, 0, 1/4],
+    [0, 0, 0, 1, 0]
+])
+
+q = np.zeros((61, 5))
+q[0] = [1, 0, 0, 0, 0]
+
+for n in range(60):
+    q[n+1] = q[n] @ P
+
+running_avg_q2 = np.cumsum(q[:,2]) / np.arange(1, 62)
+
+plt.plot(range(61), q[:,2], label='q_n(2)')
+plt.plot(range(61), q[:,4], label='q_n(4)')
+plt.plot(range(61), running_avg_q2, label='running average of q_n(2)')
+plt.xlabel('n')
+plt.ylabel('Probability')
+plt.legend()
+plt.show()
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# PageRank transition matrix
+P = np.array([
+    [0, 1/2, 1/2, 0, 0, 0, 0, 0],
+    [1/3, 0, 1/3, 1/3, 0, 0, 0, 0],
+    [1/3, 1/3, 0, 0, 1/3, 0, 0, 0],
+    [0, 0, 1/2, 0, 1/2, 0, 0, 0],
+    [0, 1/3, 0, 0, 0, 1/3, 1/3, 0],
+    [0, 0, 0, 0, 0, 1, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 1],
+    [0, 0, 0, 0, 0, 0, 1, 0]
+])
+
+d = 0.85
+
+G = d * P + (1-d) / 8 * np.ones((8,8))
+
+# Stationary distribution
+q = np.ones(8) / 8
+
+while True:
+    q_new = q @ G
+    if np.sum(np.abs(q_new - q)) < 1e-10:
+        break
+    q = q_new
+
+pi = q_new
+
+print("PageRank:")
+print(pi)
+
+# Simulation parameters
+R = 100
+T = 10**5
+
+rng = np.random.default_rng(0)
+
+# All surfers start at page 1
+states = np.zeros(R, dtype=int)
+
+# Number of visits to each page
+counts = np.zeros((R, 8), dtype=int)
+
+# Times at which to calculate error
+times = np.unique(np.round(np.logspace(2, 5, 50)).astype(int))
+
+errors = []
+
+for t in range(1, T + 1):
+
+    # Generate uniform random numbers
+    u = rng.random(R)
+
+    # Vectorized inverse transform sampling
+    cdf = np.cumsum(G[states], axis=1)
+
+    states = (u[:, None] > cdf).sum(axis=1)
+
+    # Record visits
+    counts[np.arange(R), states] += 1
+
+    if t in times:
+
+        estimates = counts / t
+
+        max_errors = np.max(
+            np.abs(estimates - pi),
+            axis=1
+        )
+
+        rms_error = np.sqrt(np.mean(max_errors**2))
+
+        errors.append(rms_error)
+
+estimate_one = counts[0] / T
+
+print("\nOne surfer estimate:")
+print(estimate_one)
+
+plt.figure()
+x = np.arange(8)
+
+plt.bar(x - 0.2, estimate_one, width=0.4, label="Simulation")
+plt.bar(x + 0.2, pi, width=0.4, label="PageRank")
+
+plt.xticks(x, np.arange(1,9))
+plt.xlabel("Page")
+plt.ylabel("Probability")
+plt.legend()
+plt.show()
+
+plt.figure()
+plt.loglog(times, errors, 'o-')
+
+plt.xlabel("T")
+plt.ylabel("RMS max error")
+plt.title("Simulation error")
+plt.show()
+
+# Fit slope
+slope = np.polyfit(
+    np.log10(times),
+    np.log10(errors),
+    1
+)[0]
+
+print("Fitted slope:", slope)
