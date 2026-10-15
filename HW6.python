@@ -1,0 +1,305 @@
+
+"""Download Big 12 conference games for 2025 and 2026 from ESPN.
+Writes the results to big12.csv.
+"""
+
+import csv
+import json
+import urllib.request
+
+URL = (
+    "https://site.api.espn.com/apis/site/v2/sports/football/"
+    "college-football/scoreboard?seasontype=2&groups=4&limit=200"
+)
+
+rows = []
+seen = set()
+
+for season in (2025, 2026):
+    for week in range(1, 16):
+        url = f"{URL}&dates={season}&week={week}"
+
+        try:
+            with urllib.request.urlopen(url, timeout=30) as response:
+                data = json.load(response)
+        except Exception as error:
+            print(f"Error downloading {season}, week {week}: {error}")
+            continue
+
+        for event in data.get("events", []):
+            competition = event["competitions"][0]
+            competitors = competition["competitors"]
+
+            # Keep games where both teams are in the Big 12.
+            if not all(
+                str(team["team"].get("conferenceId", "")) == "4"
+                for team in competitors
+            ):
+                continue
+
+            home = next(
+                team for team in competitors
+                if team["homeAway"] == "home"
+            )
+            away = next(
+                team for team in competitors
+                if team["homeAway"] == "away"
+            )
+
+            completed = int(
+                competition["status"]["type"]["completed"]
+            )
+
+            home_pts = int(float(home["score"])) if completed else ""
+            away_pts = int(float(away["score"])) if completed else ""
+
+            row = (
+                season,
+                week,
+                event["date"][:10],
+                home["team"]["location"],
+                home_pts,
+                away["team"]["location"],
+                away_pts,
+                int(bool(competition.get("neutralSite", False))),
+                completed,
+            )
+
+            # Avoid duplicate games.
+            game_id = event["id"]
+            if game_id not in seen:
+                rows.append(row)
+                seen.add(game_id)
+
+# Write the CSV file.
+with open("big12.csv", "w", newline="", encoding="utf-8") as file:
+    writer = csv.writer(file)
+
+    writer.writerow([
+        "season", "week", "date", "home", "home_pts",
+        "away", "away_pts", "neutral", "completed"
+    ])
+
+    writer.writerows(rows)
+
+n25 = sum(row[0] == 2025 for row in rows)
+n26_played = sum(
+    row[0] == 2026 and row[8] == 1 for row in rows
+)
+n26_unplayed = sum(
+    row[0] == 2026 and row[8] == 0 for row in rows
+)
+
+print(f"{len(rows)} games written to big12.csv")
+print(f"2025 games: {n25}")
+print(f"2026 games played: {n26_played}")
+print(f"2026 games not yet played: {n26_unplayed}")
+
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+def problem1():
+    # Problem 1(a): stationary distribution
+    P = np.array([
+        [0, 1, 0, 0],
+        [0, 0, 1, 0],
+        [0, 0, 0, 1],
+        [0.5, 0.5, 0, 0]
+    ])
+
+    eigenvalues, eigenvectors = np.linalg.eig(P.T)
+    pi = eigenvectors[:, np.argmin(abs(eigenvalues - 1))].real
+    pi = pi / pi.sum()
+    print("Stationary distribution:", pi)
+
+    # Problem 1(c): exponent and second-largest eigenvalue modulus
+    for m in range(3, 13):
+        P = np.zeros((m, m))
+        for i in range(m - 1):
+            P[i, i + 1] = 1
+        P[m - 1, 0] = 0.5
+        P[m - 1, 1] = 0.5
+
+        B = np.eye(m, dtype=bool)
+        M = 0
+        while not B.all():
+            B = (B.astype(int) @ (P > 0).astype(int)) > 0
+            M += 1
+
+        eigenvalues = np.linalg.eigvals(P)
+        moduli = sorted(abs(eigenvalues), reverse=True)
+
+        print(m, M, (m - 1)**2 + 1, moduli[1])
+
+
+def problem2():
+    # Requires big12.csv in the same folder
+    games = pd.read_csv("big12.csv")
+    games.columns = [
+        c.strip().lower().replace(" ", "_") for c in games.columns
+    ]
+
+    teams = sorted(set(games["home"]) | set(games["away"]))
+    m = len(teams)
+    team_number = {team: i for i, team in enumerate(teams)}
+
+    # Keener score function
+    def h(S, T):
+        x = (S + 1) / (S + T + 2)
+        return 0.5 + 0.5 * np.sign(x - 0.5) * np.sqrt(abs(2*x - 1))
+
+    completed = games[games["completed"] == 1]
+
+    # Flat prior
+    priors = {"flat": np.full((m, m), 0.5)}
+
+    # Last-season prior
+    Pi = np.full((m, m), 0.5)
+    sums = np.zeros((m, m))
+    counts = np.zeros((m, m))
+
+    for _, g in completed[
+        completed["season"].astype(str) == "2025"
+    ].iterrows():
+        i = team_number[g["home"]]
+        j = team_number[g["away"]]
+        sums[i, j] += h(g["home_pts"], g["away_pts"])
+        sums[j, i] += h(g["away_pts"], g["home_pts"])
+        counts[i, j] += 1
+        counts[j, i] += 1
+
+    for i in range(m):
+        for j in range(m):
+            if counts[i, j] > 0:
+                Pi[i, j] = sums[i, j] / counts[i, j]
+
+    priors["last season"] = Pi
+
+    # Custom prior using simple preseason strengths
+    strengths = {team: m-i for i, team in enumerate(teams)}
+    Pi = np.full((m, m), 0.5)
+
+    for i in range(m):
+        for j in range(m):
+            if i != j:
+                Pi[i, j] = strengths[teams[i]] / (
+                    strengths[teams[i]] + strengths[teams[j]]
+                )
+
+    priors["custom"] = Pi
+
+    # Build A and calculate rankings for each prior
+    current = completed[completed["season"].astype(str) == "2026"]
+
+    for name, Pi in priors.items():
+        A = np.zeros((m, m))
+        game_sums = np.zeros((m, m))
+        n_games = np.zeros(m)
+
+        for _, g in current.iterrows():
+            i = team_number[g["home"]]
+            j = team_number[g["away"]]
+            game_sums[i, j] += h(g["home_pts"], g["away_pts"])
+            game_sums[j, i] += h(g["away_pts"], g["home_pts"])
+            n_games[i] += 1
+            n_games[j] += 1
+
+        for i in range(m):
+            for j in range(m):
+                if i != j:
+                    A[i, j] = (
+                        game_sums[i, j] + Pi[i, j]
+                    ) / (n_games[i] + m - 1)
+
+        values, vectors = np.linalg.eig(A)
+        k = np.argmax(values.real)
+        lam = values[k].real
+        r = vectors[:, k].real
+
+        if r.sum() < 0:
+            r = -r
+        r = r / r.sum()
+
+        moduli = sorted(abs(values), reverse=True)
+        print("\nPrior:", name)
+        print("lambda*:", lam)
+        print("|lambda2/lambda*|:", moduli[1] / abs(lam))
+
+        order = np.argsort(r)[::-1]
+        print(pd.DataFrame({
+            "Team": np.array(teams)[order],
+            "Ranking": r[order]
+        }))
+
+        plt.figure(figsize=(12, 5))
+        plt.bar(np.array(teams)[order], r[order])
+        plt.xticks(rotation=75)
+        plt.ylabel("Ranking score")
+        plt.title("Big 12 rankings: " + name)
+        plt.tight_layout()
+        plt.show()
+
+
+def problem3():
+    # Problem 3(c): outbreak probability
+    R_values = np.linspace(0.5, 3, 250)
+
+    plt.figure(figsize=(8, 5))
+
+    for N in [100, 1000]:
+        K = N // 10
+        probabilities = []
+
+        for R0 in R_values:
+            rho = 1.0
+            denominator = 1.0
+
+            for k in range(1, K):
+                rho *= N / (R0 * (N-k))
+                denominator += rho
+
+            probabilities.append(1 / denominator)
+
+        plt.plot(R_values, probabilities, label=f"N={N}")
+
+    plt.plot(
+        R_values,
+        np.maximum(0, 1 - 1/R_values),
+        "--",
+        label="max(0, 1 - 1/R0)"
+    )
+    plt.xlabel("R0")
+    plt.ylabel("Probability of reaching K")
+    plt.legend()
+    plt.show()
+
+    # Problem 3(d): expected absorption time
+    N, K = 100, 10
+    gamma, dt = 1, 0.005
+
+    for R0 in [0.5, 0.8, 1.5, 3.0]:
+        beta = R0 * gamma / N
+        states = np.arange(1, K)
+
+        p = beta * states * (N - states) * dt
+        q = gamma * states * dt
+
+        A = np.diag(p + q)
+
+        for i in range(K - 1):
+            if i < K - 2:
+                A[i, i+1] = -p[i]
+            if i > 0:
+                A[i, i-1] = -q[i]
+
+        e = np.linalg.solve(A, np.ones(K - 1))
+        print("R0:", R0, "e1:", e[0], "e1*dt:", e[0]*dt)
+
+
+problem1()
+problem2()
+problem3()
