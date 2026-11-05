@@ -1,0 +1,152 @@
+# QUESTION 2C
+import numpy as np
+import matplotlib.pyplot as plt
+from math import factorial
+
+np.random.seed(1)
+
+N = 200000
+q = 0.4
+
+# METHOD 1: Generate original photons, then thin
+star_original = np.random.poisson(15, N)
+sky_original = np.random.poisson(10, N)
+
+star1 = np.random.binomial(star_original, q)
+sky1 = np.random.binomial(sky_original, q)
+
+# METHOD 2: Generate detected processes directly
+star2 = np.random.poisson(6, N)
+sky2 = np.random.poisson(4, N)
+
+
+def summarize(star, sky):
+    total = star + sky
+
+    print("Star mean:", np.mean(star))
+    print("Star variance:", np.var(star))
+    print("Sky mean:", np.mean(sky))
+    print("Sky variance:", np.var(sky))
+    print("Correlation:", np.corrcoef(star, sky)[0, 1])
+    print("Total mean:", np.mean(total))
+    print("Total variance:", np.var(total))
+
+    # Probability of exactly 6 star photons given 10 total
+    selected = total == 10
+    print("P(6 star | 10 total):",
+          np.mean(star[selected] == 6))
+
+
+print("METHOD 1")
+summarize(star1, sky1)
+
+print("\nMETHOD 2")
+summarize(star2, sky2)
+
+
+# Compare total detections with Poisson(10)
+total = star2 + sky2
+
+k = np.arange(0, 25)
+poisson_pmf = np.array([
+    np.exp(-10) * 10**i / factorial(i) for i in k
+])
+
+plt.hist(total, bins=np.arange(-0.5, 25.5, 1),
+         density=True, alpha=0.5, label="Simulation")
+plt.plot(k, poisson_pmf, "ro-", label="Poisson(10)")
+plt.xlabel("Total detections")
+plt.ylabel("Probability")
+plt.legend()
+plt.show()
+
+
+# First detection times of each kind
+Ts = np.random.exponential(1/1.2, N)
+Tb = np.random.exponential(1/0.8, N)
+
+first_star = Ts < Tb
+Tfirst = np.minimum(Ts, Tb)
+
+# Time until both types have appeared
+M = np.maximum(Ts, Tb)
+
+print("\nFIRST DETECTION RESULTS")
+print("P(star first):", np.mean(first_star))
+print("P(star first and within 1 sec):",
+      np.mean(first_star & (Tfirst <= 1)))
+print("Expected time until both types:", np.mean(M))
+
+# Correlation between first detection time and its type
+print("Correlation:", np.corrcoef(
+    Tfirst, first_star.astype(float))[0, 1])
+
+# Plot first detection times of both kinds
+plt.hist(Ts, bins=60, alpha=0.5, density=True,
+         label="Star")
+plt.hist(Tb, bins=60, alpha=0.5, density=True,
+         label="Sky")
+plt.xlabel("Time until first detection (seconds)")
+plt.ylabel("Density")
+plt.legend()
+plt.show()
+
+
+# QUESTION 3C
+import numpy as np
+from scipy.optimize import minimize
+
+# Example data (replace or define these in your environment)
+arrivals = np.array([1.2, 3.5, 7.1, 12.4, 18.2, 21.0])
+T = 24.0
+
+# Negative log-likelihood
+def neg_loglik(params):
+    a, b, phi = params
+
+    values = a + b * np.cos(np.pi * (arrivals - phi) / 12)
+
+    if a <= b or np.any(values <= 0):
+        return 1e100  # Penalty for invalid parameter space
+
+    loglik = np.sum(np.log(values)) - T * a
+
+    return -loglik
+
+
+# Starting values
+initial = [10, 5, 14]
+
+# Optimize
+result = minimize(
+    neg_loglik,
+    initial,
+    method="SLSQP",
+    bounds=[(0.001, 40), (0, 30), (0, 24)],
+    constraints=[
+        {
+            'type': 'ineq',
+            'fun': lambda p: p[0] - p[1] - 1e-6
+        }
+    ]
+)
+
+a_hat, b_hat, phi_hat = result.x
+
+print("Estimated a:", a_hat)
+print("Estimated b:", b_hat)
+print("Estimated phi:", phi_hat)
+print("Maximized log-likelihood:", -result.fun)
+
+n = len(arrivals)
+
+constant_rate = n/T
+
+constant_loglik = (
+    n*np.log(constant_rate)-n
+)
+
+print("Constant rate:", constant_rate)
+print("Constant log-likelihood:", constant_loglik)
+
+print("Periodic model log-likelihood:", -result.fun)
