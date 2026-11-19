@@ -1,0 +1,73 @@
+
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import poisson
+
+lam = 12
+mu = 3
+T = 500
+rho = lam / mu
+
+t = 0
+n = 0
+
+time_in_state = {}
+total_area = 0
+
+# gillespie simulation
+while t < T:
+    rate = lam + n * mu
+    dt = np.random.exponential(1 / rate)
+    dt = min(dt, T - t)
+    if n not in time_in_state:
+        time_in_state[n] = 0
+
+    time_in_state[n] += dt
+    total_area += n * dt
+
+    t += dt
+
+    if t >= T:
+        break
+
+
+    if np.random.random() < lam / rate:
+        n += 1
+    else:
+        n -= 1
+
+states = np.arange(0, max(time_in_state.keys()) + 1)
+
+simulated_probs = np.array([
+    time_in_state.get(i, 0) / T for i in states
+])
+
+theoretical_probs = poisson.pmf(states, rho)
+
+differences = np.abs(simulated_probs - theoretical_probs)
+largest_difference = np.max(differences)
+
+time_average = total_area / T
+
+print("Theoretical mean:", rho)
+print("Simulated time average:", time_average)
+print("Largest difference:", largest_difference)
+
+plt.bar(states - 0.2, simulated_probs, width=0.4,
+        label="Simulation")
+plt.bar(states + 0.2, theoretical_probs, width=0.4,
+        label="Poisson(4)")
+
+plt.xlabel("Number of bikes out")
+plt.ylabel("Fraction of time / Probability")
+plt.title("Gillespie Simulation vs. Poisson(4)")
+plt.legend()
+plt.show()
+
+c = 0
+while poisson.sf(c, rho) > 0.01:
+    c += 1
+
+print("Smallest fleet size:", c)
+print("Probability demand exceeds fleet:",
+      poisson.sf(c, rho))
